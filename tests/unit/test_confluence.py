@@ -3532,6 +3532,45 @@ class TestEmbedImages:
 class TestMergedTableFidelity:
     """The document converter preserves merged tables without duplicating content."""
 
+    @pytest.mark.parametrize("nested", [False, True])
+    def test_empty_column_groups_are_removed_without_changing_cells(
+        self, converter: Page.Converter, nested: bool
+    ) -> None:
+        from bs4 import BeautifulSoup
+
+        table = (
+            '<table><colgroup><col/><col/></colgroup><tbody>'
+            '<tr><td rowspan="0" colspan="2">Report</td></tr>'
+            '<tr></tr></tbody></table>'
+        )
+        html = f"<table><tr><td>{table}</td></tr></table>" if nested else table
+        result = converter.convert(html)
+        soup = BeautifulSoup(result, "html.parser")
+        assert soup.find("colgroup") is None
+        assert soup.find("col") is None
+        assert soup.select_one('td[rowspan="0"][colspan="2"]').get_text() == "Report"
+        assert len(soup.find_all("tbody")) == 1
+        assert result.count("Report") == 1
+
+    @pytest.mark.parametrize(
+        "columns",
+        [
+            '<colgroup><col style="width:120px"/><col width="240"/></colgroup>',
+            '<colgroup style="background:red"><col/><col/></colgroup>',
+            '<colgroup span="2"></colgroup>',
+        ],
+    )
+    def test_column_groups_with_layout_are_preserved(
+        self, converter: Page.Converter, columns: str
+    ) -> None:
+        from bs4 import BeautifulSoup
+
+        html = f'<table>{columns}<tbody><tr><td colspan="2">Report</td></tr></tbody></table>'
+        result = converter.convert(html)
+        assert str(BeautifulSoup(result, "html.parser").colgroup) == str(
+            BeautifulSoup(columns, "html.parser").colgroup
+        )
+
     @pytest.mark.parametrize(
         "attributes", ['colspan="3"', 'rowspan="2"', 'rowspan="2" colspan="2"', 'rowspan="0"']
     )

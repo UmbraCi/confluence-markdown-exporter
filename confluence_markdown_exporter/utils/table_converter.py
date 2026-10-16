@@ -107,6 +107,15 @@ class TableConverter(MarkdownConverter):
         return aligned
 
     def convert_table(self, el: BeautifulSoup, text: str, parent_tags: list[str]) -> str:
+        # Empty column declarations add no layout; keep groups carrying actual metadata.
+        for group in el.find_all("colgroup"):
+            if not group.attrs and all(
+                (isinstance(child, Tag) and child.name == "col" and not child.attrs)
+                or (not isinstance(child, Tag) and not str(child).strip())
+                for child in group.children
+            ):
+                group.decompose()
+
         if "table" in parent_tags:
             return str(el)
 
