@@ -118,7 +118,7 @@ _CLOUD_URL_RE = re.compile(
 # 2) Server [/display]/{space_key}[/{page_title}]
 _SERVER_URL_RE = re.compile(
     r"^(?:/display)?"
-    r"/(?P<space_key>[A-Za-z0-9._-]+)"
+    r"/(?P<space_key>[A-Za-z0-9~._-]+)"
     r"(?:/(?P<page_title>[^/?#]+))?/?$"
 )
 

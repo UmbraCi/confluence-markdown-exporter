@@ -208,6 +208,18 @@ class TestDecodeTinyLinkPageId:
 class TestParseConfluencePath:
     """Test cases for parse_confluence_path function."""
 
+    @pytest.mark.parametrize(
+        ("path", "title"),
+        [("/display/~someone", None), ("/display/~someone/My+Page", "My Page")],
+    )
+    def test_personal_space_is_not_a_page_named_after_the_user(
+        self, path: str, title: str | None
+    ) -> None:
+        ref = parse_confluence_path(path)
+        assert ref is not None
+        assert ref.space_key == "~someone"
+        assert ref.page_title == title
+
     @pytest.mark.parametrize(("url", "expected"), _PARSE_CONFLUENCE_PATH_CASES)
     def test_parse_confluence_path(self, url: str, expected: ConfluenceRef | None) -> None:
         path = urllib.parse.urlparse(url).path if "://" in url else url
