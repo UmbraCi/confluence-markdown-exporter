@@ -240,10 +240,11 @@ def test_repeated_content_tree_reuses_descendants(
     assert counting_page.descendants_calls == 1
 
 
+@patch("confluence_markdown_exporter.confluence._search_pages")
 @patch("confluence_markdown_exporter.confluence.Page.from_id")
 @patch("confluence_markdown_exporter.confluence.settings")
 def test_content_tree_depth_limits_nesting(
-    mock_settings: MagicMock, mock_from_id: MagicMock
+    mock_settings: MagicMock, mock_from_id: MagicMock, search: MagicMock
 ) -> None:
     mock_from_id.side_effect = _from_id_factory(TITLES)
     descendants = [
@@ -253,6 +254,7 @@ def test_content_tree_depth_limits_nesting(
     ]
     converter = _converter(mock_settings, _make_page(_content_tree_editor2(depth="1"), descendants))
 
+    search.side_effect = [NESTED_DESCENDANTS[:2], NESTED_DESCENDANTS[2:]]
     result = converter.convert_pagetree(_el(), "", [])
 
     assert result == "\n- [[Child A]]\n- [[Child B]]\n\n"
@@ -397,14 +399,16 @@ def test_content_tree_plaintext_root_falls_back_to_text(
     assert result == "\n- [[Child A]]\n\n"
 
 
+@patch("confluence_markdown_exporter.confluence._search_pages")
 @patch("confluence_markdown_exporter.confluence.Page.from_id")
 @patch("confluence_markdown_exporter.confluence.settings")
 def test_children_macro_defaults_to_direct_children(
-    mock_settings: MagicMock, mock_from_id: MagicMock
+    mock_settings: MagicMock, mock_from_id: MagicMock, search: MagicMock
 ) -> None:
     mock_from_id.side_effect = _from_id_factory(TITLES)
     converter = _converter(mock_settings, _make_page(_children_editor2(), NESTED_DESCENDANTS))
 
+    search.side_effect = [NESTED_DESCENDANTS[:2], NESTED_DESCENDANTS[2:]]
     result = converter.convert_pagetree(_children_el(), "", [])
 
     assert result == "\n- [[Child A]]\n- [[Child B]]\n\n"
@@ -426,16 +430,18 @@ def test_children_macro_all_true_renders_full_tree(
     assert result == "\n- [[Child A]]\n- [[Child B]]\n  - [[Grandchild B1]]\n\n"
 
 
+@patch("confluence_markdown_exporter.confluence._search_pages")
 @patch("confluence_markdown_exporter.confluence.Page.from_id")
 @patch("confluence_markdown_exporter.confluence.settings")
 def test_children_macro_explicit_depth_overrides_default(
-    mock_settings: MagicMock, mock_from_id: MagicMock
+    mock_settings: MagicMock, mock_from_id: MagicMock, search: MagicMock
 ) -> None:
     mock_from_id.side_effect = _from_id_factory(TITLES)
     converter = _converter(
         mock_settings, _make_page(_children_editor2(depth="2"), NESTED_DESCENDANTS)
     )
 
+    search.side_effect = [NESTED_DESCENDANTS[:2], NESTED_DESCENDANTS[2:]]
     result = converter.convert_pagetree(_children_el(), "", [])
 
     assert result == "\n- [[Child A]]\n- [[Child B]]\n  - [[Grandchild B1]]\n\n"
@@ -484,3 +490,18 @@ def test_descendant_with_zero_id_is_skipped(
 
     assert result == "\n- [[Child A]]\n\n"
     assert "Broken" not in result
+
+
+@patch("confluence_markdown_exporter.confluence._search_pages")
+@patch("confluence_markdown_exporter.confluence.settings")
+def test_depth_limited_tree_fetches_only_visible_levels(
+    mock_settings: MagicMock, search: MagicMock
+) -> None:
+    page = _make_page(_content_tree_editor2(depth="2"))
+    search.side_effect = [NESTED_DESCENDANTS[:2], NESTED_DESCENDANTS[2:]]
+    converter = _converter(mock_settings, page)
+    result = converter.convert_pagetree(_el(), "", [])
+    assert "Grandchild B1" in result
+    assert search.call_count == 2
+    assert search.call_args_list[0].args == ("type=page AND (parent=100)", BASE_URL)
+    assert search.call_args_list[1].args == ("type=page AND (parent=1 OR parent=2)", BASE_URL)

@@ -3527,3 +3527,104 @@ class TestEmbedImages:
 
     def test_missing_file_falls_back_to_link(self, tmp_path: Path) -> None:
         assert self._convert(tmp_path, write_file=False) == "![](attachments/abc-guid-111.png)"
+
+
+class TestMergedTableFidelity:
+    """The document converter preserves merged tables without duplicating content."""
+
+    @pytest.mark.parametrize(
+        "attributes", ['colspan="3"', 'rowspan="2"', 'rowspan="2" colspan="2"', 'rowspan="0"']
+    )
+    def test_merged_cell_keeps_html_structure(
+        self, converter: Page.Converter, attributes: str
+    ) -> None:
+        from bs4 import BeautifulSoup
+
+        html = (
+            f"<table><tbody><tr><td {attributes}><p>Unique title</p>"
+            '<span style="color: red">Red</span><br/><strong>Bold</strong>'
+            '<a href="https://example.com">Link</a>'
+            '<img src="https://example.com/image.png"/>'
+            "<table><tr><td>Nested</td></tr></table></td><td></td></tr>"
+            "<tr><td>Tail</td></tr></tbody></table>"
+        )
+        result = converter.convert(html)
+        soup = BeautifulSoup(result, "html.parser")
+        cell = soup.find("td")
+        assert cell is not None
+        for name, value in BeautifulSoup(f"<td {attributes}></td>", "html.parser").td.attrs.items():
+            assert cell[name] == value
+        for content in ("Unique title", "Red", "Bold", "Nested", "Tail"):
+            assert result.count(content) == 1
+        assert soup.select_one('span[style="color: red"]') is not None
+        assert soup.select_one("td br") is not None
+        assert soup.select_one("td strong") is not None
+        assert len(soup.find_all("table")) == 2
+        assert len(soup.find_all("img")) == 1
+        assert soup.a["href"] == "https://example.com"
+
+    def test_ordinary_table_remains_markdown(self, converter: Page.Converter) -> None:
+        result = converter.convert("<table><tr><th>A</th></tr><tr><td>B</td></tr></table>")
+        assert "|" in result
+        assert "<table" not in result
+
+    def test_nested_table_without_merges_keeps_existing_output(
+        self, converter: Page.Converter
+    ) -> None:
+        html = (
+            "<table><tr><td>Outer<table><tr><td>"
+            '<span style="color: red">Nested red</span>'
+            "</td></tr></table></td></tr></table>"
+        )
+        result = converter.convert(html)
+        assert result.lstrip().startswith("|")
+        assert '<table><tr><td><span style="color: red">Nested red</span>' in result
+
+    def test_merged_table_rewrites_local_resources(self) -> None:
+        from bs4 import BeautifulSoup
+
+        attachment = _make_attachment("123", "file-id", title="image.png", media_type="image/png")
+        page = _make_page(body="", body_export="", attachments=[attachment])
+        target = _make_page(body="", body_export="", attachments=[])
+        target.id = 555
+        target.title = "Target"
+        html = (
+            '<table><tr><td colspan="2">'
+            '<a href="/pages/viewpage.action?pageId=555"><strong>Page</strong></a>'
+            '<a href="/download/attachments/1/image.png">File</a>'
+            '<a href="https://external.example" title="Tooltip">External</a>'
+            '<img data-linked-resource-id="123" src="/download/attachments/1/image.png"/>'
+            "</td></tr></table>"
+        )
+        with (
+            patch("confluence_markdown_exporter.confluence.settings") as settings,
+            patch("confluence_markdown_exporter.confluence.Page.from_id", return_value=target),
+        ):
+            settings.export.attachment_href = "relative"
+            settings.export.attachment_path = "attachments/{attachment_id}{attachment_extension}"
+            settings.export.page_href = "relative"
+            settings.export.page_path = "{page_id}.md"
+            settings.export.embed_images = False
+            settings.export.image_captions = False
+            result = Page.Converter(page).convert(html)
+        soup = BeautifulSoup(result, "html.parser")
+        links = soup.find_all("a")
+        assert links[0]["href"] == "555.md"
+        assert links[0].strong.get_text() == "Page"
+        assert links[1]["href"] == "attachments/123.png"
+        assert links[2]["href"] == "https://external.example"
+        assert links[2]["title"] == "Tooltip"
+        assert soup.img["src"] == "attachments/123.png"
+
+    def test_merged_table_preserves_preformatted_whitespace(
+        self, converter: Page.Converter
+    ) -> None:
+        from bs4 import BeautifulSoup
+
+        content = "first\n\nsecond\n\n\n\tthird"
+        html = f'<table><tr><td colspan="2"><pre><code>{content}</code></pre></td></tr></table>'
+        result = converter.convert(html)
+        soup = BeautifulSoup(result, "html.parser")
+        assert soup.pre.get_text() == content
+        assert soup.code.get_text() == content
+        assert "\n\n" not in result.strip()
