@@ -1,3 +1,7 @@
+> This is the UmbraCi fork of [Confluence Markdown Exporter](https://github.com/Spenhouet/confluence-markdown-exporter). Install this fork with `pip install umbraci.confluence-markdown-exporter`. The badges and installation instructions below describe the upstream project.
+>
+> To release this fork, update the version in `pyproject.toml` and `uv.lock` on `heytea/export-wiki-upstream`, then push a matching tag such as `umbraci-v1.0.0`.
+
 <p align="center">
   <a href="https://github.com/Spenhouet/confluence-markdown-exporter"><img src="https://raw.githubusercontent.com/Spenhouet/confluence-markdown-exporter/b8caaba935eea7e7017b887c86a740cb7bf99708/logo.png" alt="confluence-markdown-exporter"></a>
 </p>

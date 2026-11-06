@@ -3,8 +3,8 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "confluence-markdown-exporter"
-version = "5.6.0+heytea.5"
+name = "umbraci.confluence-markdown-exporter"
+version = "1.0.0"
 description = "A tool to export Confluence pages to Markdown"
 keywords = ["confluence", "atlassian", "markdown", "export", "convertion", "download"]
 readme = "README.md"
@@ -45,10 +45,10 @@ docs = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/Spenhouet/confluence-markdown-exporter"
+Homepage = "https://github.com/UmbraCi/confluence-markdown-exporter"
 Documentation = "https://spenhouet.github.io/confluence-markdown-exporter/"
-Source = "https://github.com/Spenhouet/confluence-markdown-exporter"
-Tracker = "https://github.com/Spenhouet/confluence-markdown-exporter/issues"
+Source = "https://github.com/UmbraCi/confluence-markdown-exporter"
+Tracker = "https://github.com/UmbraCi/confluence-markdown-exporter/issues"
 
 [project.scripts]
 confluence-markdown-exporter = "confluence_markdown_exporter.main:app"

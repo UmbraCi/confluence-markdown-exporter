@@ -1,0 +1,50 @@
+name: Publish UmbraCi fork
+
+on:
+  push:
+    tags:
+      - 'umbraci-v*'
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    if: github.repository == 'UmbraCi/confluence-markdown-exporter'
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/umbraci-confluence-markdown-exporter/
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Verify release branch and version
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          git merge-base --is-ancestor HEAD origin/heytea/export-wiki-upstream
+          python -c 'import os, re, tomllib; v = tomllib.load(open("pyproject.toml", "rb"))["project"]["version"]; assert re.fullmatch(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)", v) and os.environ["RELEASE_TAG"] == "umbraci-v" + v, "Tag must match the project semantic version"'
+
+      - uses: astral-sh/setup-uv@v7
+
+      - name: Install dependencies
+        run: uv sync --locked --all-groups
+
+      - name: Check and test
+        run: |
+          uv run ruff check
+          uv run pytest
+
+      - name: Build distributions
+        run: uv build --no-sources
+
+      - name: Verify built package
+        run: uv run --with dist/*.whl --no-project -- python -c "import confluence_markdown_exporter as c; assert c.__version__ != 'unknown', c.__version__"
+
+      - name: Publish to PyPI
+        run: uv publish
