@@ -14,6 +14,7 @@ import mimetypes
 import os
 import re
 import time
+import unicodedata
 import urllib.parse
 import zlib
 from collections import Counter
@@ -3183,6 +3184,13 @@ class Page(Document):
         def convert_strong(self, el: BeautifulSoup, text: str, parent_tags: list[str]) -> str:
             """Convert <strong> tags, preserving spaces from Unicode whitespace entities."""
             text = self._normalize_unicode_whitespace(text)
+            stripped = text.strip()
+            # Punctuation at either edge can prevent Markdown emphasis delimiters from matching.
+            if stripped and "_noformat" not in parent_tags and any(
+                unicodedata.category(char).startswith(("P", "S"))
+                for char in (stripped[0], stripped[-1])
+            ):
+                return f"<strong>{text}</strong>"
             return super().convert_strong(el, text, parent_tags)
 
         def convert_code(self, el: BeautifulSoup, text: str, parent_tags: list[str]) -> str:
@@ -3197,8 +3205,7 @@ class Page(Document):
 
         def convert_b(self, el: BeautifulSoup, text: str, parent_tags: list[str]) -> str:
             """Convert <b> tags, preserving spaces from Unicode whitespace entities."""
-            text = self._normalize_unicode_whitespace(text)
-            return super().convert_b(el, text, parent_tags)
+            return self.convert_strong(el, text, parent_tags)
 
         def _convert_drawio_embedded_mermaid(self, filename: str) -> str | None:
             """Extract mermaid diagram from DrawIO PNG preview image.
