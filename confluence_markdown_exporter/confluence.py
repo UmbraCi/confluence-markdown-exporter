@@ -1908,6 +1908,14 @@ class Page(Document):
             front_matter_indent = 2
 
         def __init__(self, page: "Page", **options) -> None:  # noqa: ANN003
+            options.setdefault(
+                "preserve_merged_tables_as_html",
+                getattr(settings.export, "preserve_merged_tables_as_html", False),
+            )
+            options.setdefault(
+                "table_column_width",
+                getattr(settings.export, "table_column_width", "mixed"),
+            )
             super().__init__(**options)
             self.page = page
             self.page_properties = {}
@@ -1920,7 +1928,7 @@ class Page(Document):
             self._resolved_plantumlcloud: list[str | None] = []
             self._storage_macros_cache: dict[str, list[Tag]] = {}
             self._storage_soup_cache: BeautifulSoup | None = None
-            self._pagetree_descendants_cache: dict[tuple[int, int | None], list[Descendant]] = {}
+            self._pagetree_descendants_cache: dict[int, list[Descendant]] = {}
 
         @property
         def _colorid_map(self) -> dict[str, str]:
@@ -2445,30 +2453,10 @@ class Page(Document):
                 # The Children Display macro shows only direct children unless `all=true`.
                 if params.get("all", "").strip().lower() != "true":
                     max_depth = 1
-            cache_key = (root_page.id, max_depth)
-            descendants = self._pagetree_descendants_cache.get(cache_key)
+            descendants = self._pagetree_descendants_cache.get(root_page.id)
             if descendants is None:
-                if max_depth is None or max_depth > 2:  # noqa: PLR2004
-                    # Broad OR queries cost more than one subtree query for deep trees.
-                    descendants = root_page.descendants
-                else:
-                    # A shallow tree must not fetch thousands of hidden descendants.
-                    descendants = []
-                    parents = [root_page.id]
-                    for _ in range(max_depth):
-                        level = []
-                        for start in range(0, len(parents), 100):
-                            parents_cql = " OR ".join(
-                                f"parent={parent_id}" for parent_id in parents[start : start + 100]
-                            )
-                            level.extend(
-                                _search_pages(f"type=page AND ({parents_cql})", root_page.base_url)
-                            )
-                        descendants.extend(level)
-                        parents = [page.id for page in level]
-                        if not parents:
-                            break
-                self._pagetree_descendants_cache[cache_key] = descendants
+                descendants = root_page.descendants
+                self._pagetree_descendants_cache[root_page.id] = descendants
             lines = self._render_pagetree(root_page.id, descendants, max_depth)
             if not lines:
                 return ""
@@ -4339,16 +4327,6 @@ class Page(Document):
                 return self.convert_page_properties_report(el, text, parent_tags)
 
             return super().convert_table(el, text, parent_tags)
-
-        def convert_merged_table(self, el: BeautifulSoup, parent_tags: list[str]) -> str:
-            """Preserve HTML links using the same destinations as Markdown links."""
-            for link in el.find_all("a", href=True):
-                destination_link = copy.copy(link)
-                destination_link.attrs.pop("title", None)
-                converted = self.convert_a(destination_link, link.get_text(), parent_tags)
-                if destination := re.search(r".*\]\((.*)\)$", converted, re.DOTALL):
-                    link["href"] = destination.group(1)
-            return super().convert_merged_table(el, parent_tags)
 
         def convert_page_properties_report(
             self, el: BeautifulSoup, text: str, parent_tags: list[str]
